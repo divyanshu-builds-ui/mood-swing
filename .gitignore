@@ -1,0 +1,10 @@
+# temp / debug files
+_c.js
+_dump.js
+_dump.mjs
+_check.mjs
+*.tmp
+*.log
+
+# local scratch backups
+mood-swing.html
