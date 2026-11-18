@@ -445,11 +445,11 @@
       try { a.load(); } catch (e) {}
     });
   }
-  const DUCK = { 3: 0.13, 2: 0.42, 1: 0.72, 0: 0.85 };
+  const DUCK = { 3: 0.42, 2: 0.6, 1: 0.85, 0: 0.9 };
   const voices = [];           // { a, name, tier, base, until, fading }
   const lastPlayed = Object.create(null);
-  const MIN_GAP = 170;         // ms — same sound do baar isse jaldi nahi
-  const MAX_VOICES = 4;
+  const MIN_GAP = 120;         // ms — same sound do baar isse jaldi nahi
+  const MAX_VOICES = 10;
 
   function duckAll(except, tier) {
     const now = performance.now();
@@ -489,9 +489,11 @@
   function retireVoice(v) {
     const i = voices.indexOf(v);
     if (i >= 0) voices.splice(i, 1);
-    if (!voices.length) unduck();
+    // cinematic sound hatate hi baaki voices ki asli volume wapas do
+    if (!voices.some((x) => x.tier >= 3)) unduck();
   }
 
+  const tierOf = (name) => (VOICE[name] && VOICE[name][0]) || 1;
   function playSnd(name, delay) {
     const cfg = SOUND[name];
     if (!cfg || muted) return;
@@ -503,13 +505,19 @@
       if (muted) return;
       if (broken[name]) { synth(name); return; }
 
-      // voice limit — sabse purana ambience/reaction hatao
+      // voice limit — sabse purana reaction hatao (par abhi bajne wali naye ko nahi)
       while (voices.length >= MAX_VOICES) {
         let idx = voices.findIndex((v) => v.tier === 0);
         if (idx < 0) idx = voices.findIndex((v) => v.tier === 1);
+        if (idx < 0) idx = voices.findIndex((v) => v.tier === 2);
         if (idx < 0) idx = 0;
         const old = voices.splice(idx, 1)[0];
-        try { old.a.pause(); } catch (e) {}
+        if (old && old.a) {
+          // purane ko pause mat karo — bas thoda kam volume (dono sunai den)
+          const a=old.a, v0=a.volume, t0=performance.now();
+          const dn=()=>{ if(!a.paused) a.volume=Math.max(0.001,v0*(1-0.6*Math.min(1,(performance.now()-t0)/100))); if(performance.now()-t0<100)requestAnimationFrame(dn); };
+          dn();
+        }
       }
 
       const a = new Audio(cfg.src);
@@ -523,7 +531,9 @@
       if (top > tier) vol *= 0.62;
       a.volume = 0.0001;
       a.play().then(() => {
-        duckAll(a, tier);
+        // ducking SIRF cinematic tier-3 clips (boss/win/lose) ke liye —
+        // normal hit/miss me sab apni volume pe chalte hain (yehi bug tha)
+        if (tier >= 3) duckAll(a, 3);
         const t0 = performance.now(), rise = 60;
         const step = () => {
           if (!a.paused) a.volume = vol * Math.min(1, (performance.now() - t0) / rise);
@@ -546,8 +556,8 @@
         const t = performance.now();
         if (t >= fadeStart) {
           const k = Math.min(1, (t - fadeStart) / 260);
-          a.volume = Math.max(0.0001, a.volume * (1 - 0.12 * k));
-          if (k >= 1) { try { a.pause(); } catch (e) {} retireVoice(v); return; }
+          a.volume = Math.max(0.0001, v.base * (1 - k));
+          if (k >= 1) { retireVoice(v); try { a.pause(); } catch (e) {} return; }
         }
         setTimeout(tick, 45);
       };
